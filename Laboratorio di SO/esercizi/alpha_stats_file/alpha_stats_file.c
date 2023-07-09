@@ -21,7 +21,7 @@ typedef struct
 
 typedef struct
 {
-    int numerov;
+    char *pathname;
     pthread_t tid;
     tnames tnames;
     contatore *cont;
@@ -50,43 +50,26 @@ void init_SHARED(contatore *arg)
 void *controllore(void *arg)
 {
     int err;
-    int contatore = 0;
+    char buffer;
     thread_data *td = (thread_data *)(arg);
-    while (1)
+
+    FILE *file = fopen(td->pathname, "r");
+
+    if (!file)
+    {
+        exit_with_sys_err("fopen");
+    }
+
+    while (fscanf(file, "%c\n", &buffer) == 1)
     {
         if ((err = sem_wait(&td->cont->sem[CONTROLLORE])) != 0)
         {
             exit_with_err("sem_wait", err);
         }
-        contatore++;
-        if (contatore == td->numerov)
-        {
-            td->cont->done = 1;
-            if ((err = sem_post(&td->cont->sem[AL])) != 0)
-            {
-                exit_with_err("sem_post", err);
-            }
-            if ((err = sem_post(&td->cont->sem[MZ])) != 0)
-            {
-                exit_with_err("sem_post", err);
-            }
-            printf("[C] Statistiche: ");
-            for (int i = 0; i < 26; i++)
-            {
-                if ((i % 4 && i != 0) == 0)
-                {
-                    printf("\n");
-                }
-                printf("%c: %d\t", i + 'a', td->cont->alf[i]);
-            }
-            printf("\n");
-            break;
-        }
 
-        td->cont->c = rand() % (122 - 97 + 1) + 97;
-
+        td->cont->c = buffer;
         printf("[C] Ho generato la lettera: %c\n", td->cont->c);
-        if (td->cont->c < 'm')
+        if (buffer < 'm')
         {
             if ((err = sem_post(&td->cont->sem[AL])) != 0)
             {
@@ -101,7 +84,26 @@ void *controllore(void *arg)
             }
         }
     }
-
+    td->cont->done = 1;
+    if ((err = sem_post(&td->cont->sem[AL])) != 0)
+    {
+        exit_with_err("sem_post", err);
+    }
+    if ((err = sem_post(&td->cont->sem[MZ])) != 0)
+    {
+        exit_with_err("sem_post", err);
+    }
+    printf("[C] Statistiche: ");
+    for (int i = 0; i < 26; i++)
+    {
+        if ((i % 4 && i != 0) == 0)
+        {
+            printf("\n");
+        }
+        printf("%c: %d\t", i + 'a', td->cont->alf[i]);
+    }
+    printf("\n");
+    fclose(file);
     pthread_exit(NULL);
 }
 
@@ -166,13 +168,7 @@ int main(int argc, char **argv)
 {
     if (argc < 2)
     {
-        printf("Usage %s <numero volte (ex 3)>\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
-
-    if (atoi(argv[1]) <= 0)
-    {
-        printf("Numero volte maggiori e diversi da 0 (ex 3)\n");
+        printf("Usage %s <nomefile.txt>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -184,7 +180,7 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < 3; i++)
     {
-        td[i].numerov = atoi(argv[1]);
+        td[i].pathname = argv[1];
         td[i].tnames = i;
         td[i].cont = lettere;
     }
